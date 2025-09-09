@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-
-const execAsync = promisify(exec);
+import ConvertApi from 'convertapi';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +15,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ConvertAPIの設定
+    const convertApiSecret = process.env.CONVERTAPI_SECRET;
+    if (!convertApiSecret) {
+      console.error('CONVERTAPI_SECRET not found in environment variables');
+      return NextResponse.json(
+        { error: 'ConvertAPI configuration missing' },
+        { status: 500 }
+      );
+    }
+
+    // ConvertAPIクライアントを初期化
+    const convertApi = new ConvertApi(convertApiSecret);
+
     // 一時ディレクトリを作成
     const tempDir = path.join(process.cwd(), 'temp');
     await fs.mkdir(tempDir, { recursive: true });
@@ -27,62 +37,41 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(tempFilePath, buffer as any);
     
-    // PDF出力パス
-    const pdfPath = path.join(tempDir, `output-${Date.now()}.pdf`);
-    
     try {
-      // Check if LibreOffice is available
-      try {
-        await execAsync('libreoffice --version');
-        console.log('LibreOffice is available, proceeding with PDF conversion');
-      } catch (versionError) {
-        console.log('LibreOffice not available, using fallback method');
-        throw new Error('LibreOffice not installed');
-      }
-
-      // LibreOfficeを使用してPDF変換
-      const command = `libreoffice --headless --convert-to pdf --outdir "${tempDir}" "${tempFilePath}"`;
-      console.log('Executing LibreOffice command:', command);
+      console.log('Starting ConvertAPI PDF conversion...');
+      console.log('Input file size:', buffer.length, 'bytes');
       
-      const { stdout, stderr } = await execAsync(command, { timeout: 30000 });
-      console.log('LibreOffice stdout:', stdout);
-      if (stderr) console.log('LibreOffice stderr:', stderr);
+      // ConvertAPIを使用してPDF変換
+      const result = await convertApi.convert('pdf', { File: tempFilePath }, 'pptx');
       
-      // 変換されたPDFファイルを確認
-      const convertedPdfPath = tempFilePath.replace('.pptx', '.pdf');
-      console.log('Looking for converted PDF at:', convertedPdfPath);
+      console.log('ConvertAPI conversion successful');
       
-      if (await fs.access(convertedPdfPath).then(() => true).catch(() => false)) {
-        console.log('PDF conversion successful');
-        
-        // PDFファイルを読み込み
-        const pdfBuffer = await fs.readFile(convertedPdfPath);
-        
-        // 公開ディレクトリに保存
-        const publicDir = path.join(process.cwd(), 'public', 'converted');
-        await fs.mkdir(publicDir, { recursive: true });
-        
-        const publicPdfPath = path.join(publicDir, `converted-${Date.now()}.pdf`);
-        await fs.writeFile(publicPdfPath, pdfBuffer as any);
-        
-        // 一時ファイルを削除
-        await fs.unlink(tempFilePath);
-        await fs.unlink(convertedPdfPath);
-        
-        console.log('PDF conversion completed successfully');
-        return NextResponse.json({
-          success: true,
-          pdfUrl: `/converted/${path.basename(publicPdfPath)}`,
-          method: 'libreoffice'
-        });
-      } else {
-        throw new Error('PDF conversion failed - output file not found');
-      }
+      // 公開ディレクトリに保存
+      const publicDir = path.join(process.cwd(), 'public', 'converted');
+      await fs.mkdir(publicDir, { recursive: true });
+      
+      // ConvertAPIの結果を直接保存
+      await result.saveFiles(publicDir);
+      
+      // 保存されたPDFファイルのパスを取得（ConvertAPIが生成したファイル名を使用）
+      const files = await fs.readdir(publicDir);
+      const pdfFile = files.find(file => file.endsWith('.pdf'));
+      const publicPdfPath = path.join(publicDir, pdfFile || `converted-${Date.now()}.pdf`);
+      
+      // 一時ファイルを削除
+      await fs.unlink(tempFilePath);
+      
+      console.log('PDF conversion completed successfully with ConvertAPI');
+      return NextResponse.json({
+        success: true,
+        pdfUrl: `/converted/${path.basename(publicPdfPath)}`,
+        method: 'convertapi'
+      });
       
     } catch (conversionError) {
-      console.error('LibreOffice conversion error:', conversionError);
+      console.error('ConvertAPI conversion error:', conversionError);
       
-      // LibreOfficeが利用できない場合のフォールバック
+      // ConvertAPIが失敗した場合のフォールバック
       console.log('Using fallback method - returning original PPTX file');
       
       const publicDir = path.join(process.cwd(), 'public', 'uploads');
