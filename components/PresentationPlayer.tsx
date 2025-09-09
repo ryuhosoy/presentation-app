@@ -131,17 +131,42 @@ export function PresentationPlayer({
                 src={slides[currentSlide]?.imageUrl}
                 alt={`Slide ${currentSlide + 1}`}
                 className="max-w-full max-h-full object-contain transition-opacity duration-500"
+                onError={(e) => {
+                  // Fallback for broken images
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) {
+                    fallback.style.display = 'flex';
+                  }
+                }}
               />
               
+              {/* Fallback content for broken images */}
+              <div className="hidden flex-col items-center justify-center text-center text-slate-400 p-8">
+                <div className="w-16 h-16 border-4 border-dashed border-slate-600 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <Play className="w-6 h-6" />
+                </div>
+                <p className="text-lg font-medium">Slide {currentSlide + 1}</p>
+                <p className="text-sm opacity-80 mt-2">
+                  {slides[currentSlide]?.text || 'No content available'}
+                </p>
+              </div>
+              
               {/* Slide Counter */}
-              <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+              <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1 rounded-full text-sm backdrop-blur-sm">
                 {currentSlide + 1} / {slides.length}
               </div>
 
               {/* Current Slide Info */}
-              <div className="absolute bottom-4 left-4 bg-black/50 text-white px-4 py-2 rounded-lg">
+              <div className="absolute bottom-4 left-4 bg-black/50 text-white px-4 py-2 rounded-lg backdrop-blur-sm">
                 <div className="text-sm opacity-80">Now showing:</div>
                 <div className="font-medium">Slide {currentSlide + 1}</div>
+                {slides[currentSlide]?.text && (
+                  <div className="text-xs opacity-60 mt-1 max-w-xs truncate">
+                    {slides[currentSlide].text}
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -221,7 +246,25 @@ export function PresentationPlayer({
                   src={slide.imageUrl}
                   alt={`Slide ${index + 1}`}
                   className="w-20 h-14 object-cover rounded border border-slate-600"
+                  onError={(e) => {
+                    // Fallback for broken thumbnail images
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    const fallback = target.nextElementSibling as HTMLElement;
+                    if (fallback) {
+                      fallback.style.display = 'flex';
+                    }
+                  }}
                 />
+                
+                {/* Fallback for broken thumbnail images */}
+                <div className="hidden w-20 h-14 bg-slate-700 rounded border border-slate-600 flex-col items-center justify-center text-center">
+                  <div className="text-xs text-slate-400 font-medium">{index + 1}</div>
+                  <div className="text-xs text-slate-500 truncate px-1">
+                    {slide.text?.substring(0, 10) || 'Slide'}
+                  </div>
+                </div>
+                
                 <div className="absolute -bottom-1 -right-1 bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded-full">
                   {index + 1}
                 </div>
