@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Fullscreen as FullScreen, Download, Share2 } from 'lucide-react';
+import { Play, Pause, Fullscreen as FullScreen, Download, Share2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -39,6 +39,10 @@ export function PresentationPlayer({
 }: PresentationPlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!isPlaying || !audioData) return;
@@ -85,6 +89,45 @@ export function PresentationPlayer({
     alert('Video generation would start here. In production, this would use ffmpeg or similar tools to create an MP4 file.');
   };
 
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.25, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoomLevel > 1) {
+      setImagePosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // スライドが変更されたときにズームをリセット
+  useEffect(() => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
+  }, [currentSlide]);
+
   return (
     <Card className="overflow-hidden bg-slate-800/50 border-slate-700 backdrop-blur-sm">
       {/* Player Header */}
@@ -92,6 +135,39 @@ export function PresentationPlayer({
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-white">Presentation Player</h3>
           <div className="flex items-center space-x-2">
+            {/* Zoom Controls */}
+            <div className="flex items-center space-x-1 border border-slate-600 rounded-lg p-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleZoomOut}
+                disabled={zoomLevel <= 0.5}
+                className="text-slate-400 hover:text-white h-8 w-8 p-0"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </Button>
+              <span className="text-xs text-slate-400 px-2 min-w-[3rem] text-center">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleZoomIn}
+                disabled={zoomLevel >= 3}
+                className="text-slate-400 hover:text-white h-8 w-8 p-0"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResetZoom}
+                className="text-slate-400 hover:text-white h-8 w-8 p-0"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            </div>
+            
             <Button
               variant="ghost"
               size="sm"
@@ -124,13 +200,28 @@ export function PresentationPlayer({
       {/* Main Player */}
       <div className="relative">
         {/* Slide Display */}
-        <div className="aspect-video bg-slate-900 flex items-center justify-center relative overflow-hidden">
+        <div 
+          className="bg-slate-900 flex items-center justify-center relative overflow-hidden cursor-grab" 
+          style={{ minHeight: '400px', maxHeight: '600px' }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
           {slides.length > 0 ? (
             <>
               <img
                 src={slides[currentSlide]?.imageUrl}
                 alt={`Slide ${currentSlide + 1}`}
-                className="max-w-full max-h-full object-contain transition-opacity duration-500"
+                className="transition-all duration-300 select-none"
+                style={{ 
+                  transform: `scale(${zoomLevel}) translate(${imagePosition.x / zoomLevel}px, ${imagePosition.y / zoomLevel}px)`,
+                  maxWidth: '100%', 
+                  maxHeight: '100%',
+                  width: 'auto',
+                  height: 'auto',
+                  cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                }}
                 onError={(e) => {
                   // Fallback for broken images
                   const target = e.target as HTMLImageElement;
@@ -140,6 +231,7 @@ export function PresentationPlayer({
                     fallback.style.display = 'flex';
                   }
                 }}
+                draggable={false}
               />
               
               {/* Fallback content for broken images */}
