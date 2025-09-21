@@ -70,6 +70,7 @@ export default function Home() {
       for (const file of files) {
         if (file.name.endsWith('.pptx')) {
           // Use PDF conversion approach for PowerPoint files
+          console.log("file in handleSlidesUpload", file);
           setProcessingStep(`Converting ${file.name} to PDF and extracting slides...`);
           const slideData = await parsePowerPointFile(file);
           // スライド番号を追加

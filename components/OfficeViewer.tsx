@@ -68,6 +68,8 @@ export function OfficeViewer({ file, onSlidesExtracted, onError }: OfficeViewerP
         body: formData
       });
 
+      console.log("after fetch('/api/convert/pptx-to-images') in OfficeViewer.tsx", response);
+
       if (!response.ok) {
         throw new Error(`Conversion failed: ${response.status}`);
       }

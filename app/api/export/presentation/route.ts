@@ -39,8 +39,10 @@ export async function POST(request: NextRequest) {
         autoAdvance: true,
         showSlideNumbers: true,
         enableSubtitles: false
-      }
+      } 
     };
+
+    console.log("presentationData", presentationData);
 
     // In a real implementation, you might save this to a database
     // For now, we'll return the data for client-side download

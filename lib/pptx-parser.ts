@@ -16,45 +16,74 @@ export class PPTXParser {
 
   async parsePPTX(file: File): Promise<SlideData[]> {
     try {
-      console.log('Starting PowerPoint parsing with direct image conversion approach...');
+      console.log(`[parsePPTX] 開始: ファイル名=${file.name}, サイズ=${file.size}bytes`);
+      console.log('Starting PowerPoint parsing with direct image conversion and PPTX analysis...');
       
-      // First, try direct image conversion approach
+      // First, try direct image conversion for high-quality images
       try {
+        console.log("[parsePPTX] 直接画像変換アプローチを試行します...");
         const imageSlides = await this.convertToImagesAndExtract(file);
         if (imageSlides && imageSlides.length > 0) {
-          console.log('Successfully extracted slides using direct image conversion');
-          return imageSlides;
+          console.log(`[parsePPTX] 直接画像変換で${imageSlides.length}枚のスライドを抽出しました`);
+          
+          // 直接PPTX解析でテキストを抽出して結合
+          console.log("[parsePPTX] テキスト抽出のために直接PPTX解析を実行します...");
+          const textSlides = await this.extractTextFromPPTX(file);
+          
+          // 画像とテキストを結合
+          const combinedSlides = this.combineImageAndTextSlides(imageSlides, textSlides);
+          console.log(`[parsePPTX] 画像とテキストを結合しました: ${combinedSlides.length}枚のスライド`);
+          
+          return combinedSlides;
         }
       } catch (imageError) {
-        console.warn('Direct image conversion failed, trying PDF conversion:', imageError);
+        console.warn('[parsePPTX] 直接画像変換に失敗しました。直接PPTX解析のみを実行します:', imageError);
       }
       
-      // Second, try PDF conversion approach
-      try {
-        const pdfSlides = await this.convertToPDFAndExtract(file);
-        if (pdfSlides && pdfSlides.length > 0) {
-          console.log('Successfully extracted slides using PDF conversion');
-          return pdfSlides;
-        }
-      } catch (pdfError) {
-        console.warn('PDF conversion failed, falling back to direct parsing:', pdfError);
-      }
+      // Fallback to direct PPTX parsing only
+      console.log('[parsePPTX] 直接PPTX解析のみを実行します...');
+      const slides = await this.extractTextFromPPTX(file);
       
-      // Fallback to direct PPTX parsing
-      console.log('Falling back to direct PPTX parsing...');
-      this.zip = await JSZip.loadAsync(file);
-      
-      // Parse slide relationships
-      await this.parseSlideRelations();
-      
-      // Extract slide content and text
-      const slides = await this.extractSlides();
-      
+      console.log(`[parsePPTX] 完了: ${slides.length}枚のスライドを抽出しました`);
       return slides;
     } catch (error) {
-      console.error('Error parsing PPTX:', error);
+      console.error('[parsePPTX] PPTX解析エラー:', error);
       throw new Error('Failed to parse PowerPoint file. Please ensure it\'s a valid .pptx file.');
     }
+  }
+
+  private async extractTextFromPPTX(file: File): Promise<SlideData[]> {
+    console.log('[extractTextFromPPTX] 直接PPTX解析でテキスト抽出を開始します...');
+    this.zip = await JSZip.loadAsync(file);
+    console.log(`[extractTextFromPPTX] ZIPファイルを読み込みました。ファイル数: ${Object.keys(this.zip.files).length}`);
+    
+    // Parse slide relationships
+    console.log('[extractTextFromPPTX] スライド関係を解析します...');
+    await this.parseSlideRelations();
+    console.log(`[extractTextFromPPTX] スライド関係を解析しました。関係数: ${this.slideRelations.size}`);
+    
+    // Extract slide content and text
+    console.log('[extractTextFromPPTX] スライドコンテンツとテキストを抽出します...');
+    const slides = await this.extractSlides();
+    
+    console.log(`[extractTextFromPPTX] 完了: ${slides.length}枚のスライドからテキストを抽出しました`);
+    return slides;
+  }
+
+  private combineImageAndTextSlides(imageSlides: SlideData[], textSlides: SlideData[]): SlideData[] {
+    console.log(`[combineImageAndTextSlides] 画像スライド: ${imageSlides.length}枚, テキストスライド: ${textSlides.length}枚`);
+    
+    return imageSlides.map((imageSlide, index) => {
+      const textSlide = textSlides[index];
+      const combinedSlide = {
+        ...imageSlide,
+        text: textSlide ? textSlide.text : imageSlide.text,
+        slideNumber: imageSlide.slideNumber || index + 1
+      };
+      
+      console.log(`[combineImageAndTextSlides] スライド${index + 1}を結合: テキスト="${combinedSlide.text}"`);
+      return combinedSlide;
+    });
   }
 
   private async convertToImagesAndExtract(file: File): Promise<SlideData[]> {
@@ -63,6 +92,7 @@ export class PPTXParser {
       const formData = new FormData();
       formData.append('file', file);
       
+      console.log("before fetch('/api/convert/pptx-to-images') in pptx-parser.ts convertToImagesAndExtract");
       const response = await fetch('/api/convert/pptx-to-images', {
         method: 'POST',
         body: formData
@@ -114,11 +144,14 @@ export class PPTXParser {
       const formData = new FormData();
       formData.append('file', file);
       
+      console.log("before fetch('/api/convert/pptx-to-pdf') in pptx-parser.ts convertToPDFAndExtract");
       const response = await fetch('/api/convert/pptx-to-pdf', {
         method: 'POST',
         body: formData
       });
-      
+
+      console.log("after fetch('/api/convert/pptx-to-pdf') in pptx-parser.ts convertToPDFAndExtract", response);
+
       if (!response.ok) {
         throw new Error(`PDF conversion failed: ${response.status}`);
       }
@@ -141,15 +174,39 @@ export class PPTXParser {
 
   private async extractSlidesFromPDF(pdfUrl: string): Promise<SlideData[]> {
     try {
-      // Dynamic import for PDF.js
-      const pdfjsLib = await import('pdfjs-dist');
+      // Check if we're in browser environment
+      if (typeof window === 'undefined') {
+        console.warn('PDF extraction is only available in browser environment');
+        return [];
+      }
+
+      // Dynamic import for PDF.js with proper error handling
+      let pdfjsLib;
+      try {
+        pdfjsLib = await import('pdfjs-dist');
+      } catch (importError) {
+        console.error('Failed to import pdfjs-dist:', importError);
+        throw new Error('PDF.js library could not be loaded');
+      }
       
-      // Set worker source
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      // Set worker source with fallback
+      try {
+        if (pdfjsLib.GlobalWorkerOptions) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        }
+      } catch (workerError) {
+        console.warn('Failed to set PDF.js worker source:', workerError);
+      }
       
-      // Load PDF document
+      // Load PDF document with timeout
       const loadingTask = pdfjsLib.getDocument(pdfUrl);
-      const pdfDoc = await loadingTask.promise;
+      
+      const pdfDoc = await Promise.race([
+        loadingTask.promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('PDF loading timeout')), 30000)
+        )
+      ]) as any;
       
       console.log(`PDF loaded successfully with ${pdfDoc.numPages} pages`);
       
@@ -207,80 +264,134 @@ export class PPTXParser {
   }
 
   private async parseSlideRelations(): Promise<void> {
+    console.log(`[parseSlideRelations] 開始: スライド関係を解析します`);
     const relsFile = this.zip?.file('ppt/_rels/presentation.xml.rels');
-    if (!relsFile) return;
+    if (!relsFile) {
+      console.warn(`[parseSlideRelations] presentation.xml.relsが見つかりません`);
+      return;
+    }
+    console.log(`[parseSlideRelations] presentation.xml.relsを取得しました`);
 
     const relsContent = await relsFile.async('text');
+    console.log(`[parseSlideRelations] 関係ファイルの内容を読み込みました。長さ: ${relsContent.length}文字`);
+    
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(relsContent, 'text/xml');
+    console.log(`[parseSlideRelations] 関係ファイルを解析しました`);
     
     const relationships = xmlDoc.querySelectorAll('Relationship');
-    relationships.forEach(rel => {
+    console.log(`[parseSlideRelations] 関係要素を検索しました。見つかった関係数: ${relationships.length}`);
+    
+    let slideRelationCount = 0;
+    relationships.forEach((rel, index) => {
       const id = rel.getAttribute('Id');
       const target = rel.getAttribute('Target');
       const type = rel.getAttribute('Type');
       
+      console.log(`[parseSlideRelations] 関係${index + 1}: id=${id}, target=${target}, type=${type}`);
+      
       if (type?.includes('slide') && id && target) {
         this.slideRelations.set(id, target);
+        slideRelationCount++;
+        console.log(`[parseSlideRelations] スライド関係を追加: ${id} -> ${target}`);
       }
     });
+    
+    console.log(`[parseSlideRelations] 完了: ${slideRelationCount}個のスライド関係を解析しました`);
   }
 
   private async extractSlides(): Promise<SlideData[]> {
+    console.log(`[extractSlides] 開始: スライドの抽出を開始します`);
     const slides: SlideData[] = [];
     
     // Get presentation.xml to find slide order
     const presentationFile = this.zip?.file('ppt/presentation.xml');
     if (!presentationFile) {
+      console.error(`[extractSlides] presentation.xmlが見つかりません`);
       throw new Error('Invalid PowerPoint file structure');
     }
+    console.log(`[extractSlides] presentation.xmlを取得しました`);
 
     const presentationContent = await presentationFile.async('text');
+    console.log(`[extractSlides] presentation.xmlの内容を読み込みました。長さ: ${presentationContent.length}文字`);
+    
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(presentationContent, 'text/xml');
+    console.log(`[extractSlides] presentation.xmlを解析しました`);
     
     const slideIds = xmlDoc.querySelectorAll('p\\:sldId, sldId');
+    console.log(`[extractSlides] スライドIDを検索しました。見つかったスライド数: ${slideIds.length}`);
     
     for (let i = 0; i < slideIds.length; i++) {
       const slideId = slideIds[i];
       const rId = slideId.getAttribute('r:id') || slideId.getAttribute('id');
+      console.log(`[extractSlides] スライド${i + 1}: rId=${rId}`);
       
       if (rId && this.slideRelations.has(rId)) {
         const slidePath = this.slideRelations.get(rId);
+        console.log(`[extractSlides] スライド${i + 1}: slidePath=${slidePath}`);
         if (slidePath) {
           const slideData = await this.extractSlideContent(slidePath, i + 1);
           if (slideData) {
+            console.log(`[extractSlides] スライド${i + 1}のデータを取得しました:`, slideData);
             slides.push(slideData);
+          } else {
+            console.warn(`[extractSlides] スライド${i + 1}のデータの取得に失敗しました`);
           }
         }
+      } else {
+        console.warn(`[extractSlides] スライド${i + 1}: rIdが見つからないか、slideRelationsに存在しません`);
       }
     }
 
+    console.log(`[extractSlides] 完了: ${slides.length}枚のスライドを抽出しました`);
     return slides;
   }
 
   private async extractSlideContent(slidePath: string, slideNumber: number): Promise<SlideData | null> {
     try {
+      console.log(`[extractSlideContent] 開始: slidePath=${slidePath}, slideNumber=${slideNumber}`);
+      
       const slideFile = this.zip?.file(`ppt/${slidePath}`);
-      if (!slideFile) return null;
+      if (!slideFile) {
+        console.log(`[extractSlideContent] スライドファイルが見つかりません: ${slidePath}`);
+        return null;
+      }
+      console.log(`[extractSlideContent] スライドファイルを取得しました: ${slidePath}`);
 
       const slideContent = await slideFile.async('text');
+      console.log(`[extractSlideContent] スライドコンテンツを読み込みました。長さ: ${slideContent.length}文字`);
+      
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(slideContent, 'text/xml');
+      console.log(`[extractSlideContent] XMLドキュメントを解析しました`);
       
       // Extract text content from slide
       const textElements = xmlDoc.querySelectorAll('a\\:t, t');
+      console.log(`[extractSlideContent] テキスト要素を検索しました。見つかった要素数: ${textElements.length}`);
+      
+      if (textElements.length > 0) {
+        console.log(`[extractSlideContent] 各テキスト要素の内容:`);
+        Array.from(textElements).forEach((el, index) => {
+          console.log(`  [${index}] "${el.textContent?.trim()}"`);
+        });
+      }
+      
       const slideText = Array.from(textElements)
         .map(el => el.textContent?.trim())
         .filter(text => text && text.length > 0)
         .join(' ');
 
+      console.log(`[extractSlideContent] 最終的なslideText: "${slideText}"`);
+
       // Try to extract actual slide image
+      console.log(`[extractSlideContent] スライド画像の抽出を開始します`);
       const slideImageUrl = await this.extractSlideImage(slidePath, slideNumber);
       
       if (slideImageUrl) {
         // Use actual slide image if available
-        return {
+        console.log(`[extractSlideContent] スライド画像を取得しました。SlideDataオブジェクトを作成します`);
+        const slideData = {
           id: `slide-${slideNumber}`,
           imageUrl: slideImageUrl,
           startTime: (slideNumber - 1) * 10,
@@ -288,13 +399,17 @@ export class PPTXParser {
           text: slideText,
           slideNumber
         };
+        console.log(`[extractSlideContent] SlideData作成完了:`, slideData);
+        return slideData;
       } else {
         // Fallback to canvas rendering if no image found
+        console.log(`[extractSlideContent] スライド画像が見つかりません。Canvasレンダリングにフォールバックします`);
         return await this.createCanvasSlide(slideText, slideNumber);
       }
       
     } catch (error) {
-      console.error(`Error extracting slide ${slideNumber}:`, error);
+      console.error(`[extractSlideContent] スライド${slideNumber}の抽出エラー:`, error);
+      console.error(`[extractSlideContent] slidePath: ${slidePath}`);
       return null;
     }
   }
@@ -684,11 +799,14 @@ export class PPTXParser {
   }
 
   private async createCanvasSlide(slideText: string, slideNumber: number): Promise<SlideData> {
+    console.log(`[createCanvasSlide] 開始: slideNumber=${slideNumber}, slideText="${slideText}"`);
+    
     // Create a high-quality canvas to render slide preview
     const canvas = document.createElement('canvas');
     canvas.width = 1920;
     canvas.height = 1080;
     const ctx = canvas.getContext('2d');
+    console.log(`[createCanvasSlide] Canvasを作成しました: ${canvas.width}x${canvas.height}`);
     
     if (ctx) {
       // Enable high-quality rendering
@@ -793,9 +911,11 @@ export class PPTXParser {
       ctx.fillText(`Slide ${slideNumber}`, canvas.width - 100, canvas.height - 50);
       
       // Convert canvas to high-quality data URL
+      console.log(`[createCanvasSlide] Canvasを画像URLに変換します`);
       const imageUrl = canvas.toDataURL('image/png', 0.95);
+      console.log(`[createCanvasSlide] 画像URLを生成しました。長さ: ${imageUrl.length}文字`);
       
-      return {
+      const slideData = {
         id: `slide-${slideNumber}`,
         imageUrl,
         startTime: (slideNumber - 1) * 10,
@@ -803,13 +923,17 @@ export class PPTXParser {
         text: slideText,
         slideNumber
       };
+      console.log(`[createCanvasSlide] SlideData作成完了:`, slideData);
+      return slideData;
     }
     
+    console.error(`[createCanvasSlide] Canvasコンテキストの取得に失敗しました`);
     throw new Error('Failed to create canvas slide');
   }
 }
 
 export async function parsePowerPointFile(file: File): Promise<SlideData[]> {
   const parser = new PPTXParser();
+  console.log("file in pptx-parser.ts", file);
   return await parser.parsePPTX(file);
 }
