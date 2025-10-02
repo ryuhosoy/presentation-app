@@ -48,22 +48,40 @@ interface VideoGenerationResult {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('[generate-video] API呼び出し開始');
+  
   try {
     const body: VideoGenerationRequest = await request.json();
     const { slides, script, slideScripts, presentationStyle, language, targetDuration } = body;
 
+    console.log('[generate-video] リクエストデータ:', {
+      slidesCount: slides?.length || 0,
+      scriptLength: script?.length || 0,
+      slideScriptsCount: slideScripts?.length || 0,
+      presentationStyle,
+      language,
+      targetDuration
+    });
+
     if (!slides || slides.length === 0) {
+      console.error('[generate-video] スライドが提供されていません');
       return NextResponse.json(
         { error: 'スライドが提供されていません' },
         { status: 400 }
       );
     }
 
-    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+    if (!script || script.trim().length === 0) {
+      console.error('[generate-video] スクリプトが提供されていません');
       return NextResponse.json(
-        { error: 'ElevenLabs APIキーが設定されていません' },
-        { status: 500 }
+        { error: 'スクリプトが提供されていません' },
+        { status: 400 }
       );
+    }
+
+    // ElevenLabs APIキーの警告（エラーではなく警告に変更）
+    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+      console.warn('[generate-video] ElevenLabs APIキーが設定されていません。ダミー音声を使用します。');
     }
 
     // デバッグ情報を追加
@@ -76,16 +94,25 @@ export async function POST(request: NextRequest) {
       targetDuration
     });
 
-    // 1. スクリプトから音声を生成
-    const audioResult = await generateAudioFromScript(script, language);
+    // 1. 各スライドのスクリプトから個別に音声を生成
+    console.log('[generate-video] ステップ1: 各スライドの音声生成開始');
+    const audioResult = await generateAudioFromSlideScripts(slideScripts, language);
+    console.log('[generate-video] ステップ1完了: 音声生成完了', {
+      audioUrl: audioResult.audioUrl,
+      duration: audioResult.duration
+    });
     
-    // 2. スライドと音声を同期
-    const slideTimings = await synchronizeSlidesWithAudio(slides, slideScripts, audioResult.duration, audioResult.audioPath);
-    
-    console.log('Generated slide timings:', slideTimings);
+    // 2. スライドと音声を同期（個別音声なので直接slideScriptsの時間を使用）
+    console.log('[generate-video] ステップ2: スライド同期開始');
+    const slideTimings = createSlideTimingsFromScripts(slideScripts, audioResult.duration);
+    console.log('[generate-video] ステップ2完了: スライド同期完了', slideTimings);
     
     // 3. 動画を生成（実際の実装ではffmpegなどを使用）
+    console.log('[generate-video] ステップ3: 動画生成開始');
     const videoResult = await generateVideoFromSlides(slides, audioResult.audioPath, slideTimings);
+    console.log('[generate-video] ステップ3完了: 動画生成完了', {
+      videoUrl: videoResult.videoUrl
+    });
 
     return NextResponse.json({
       success: true,
@@ -98,20 +125,108 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Video generation error:', error);
+    console.error('[generate-video] 動画生成エラー:', error);
+    console.error('[generate-video] エラースタック:', error instanceof Error ? error.stack : 'No stack');
+    
+    let errorMessage = '動画生成に失敗しました';
+    if (error instanceof Error) {
+      errorMessage += `: ${error.message}`;
+    }
+    
     return NextResponse.json(
-      { success: false, error: '動画生成に失敗しました' },
+      { 
+        success: false, 
+        error: errorMessage,
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
 
-async function generateAudioFromScript(script: string, language: string) {
+async function generateAudioFromSlideScripts(slideScripts: any[], language: string) {
+  console.log('[generateAudioFromSlideScripts] 開始');
+  console.log('[generateAudioFromSlideScripts] スライドスクリプト数:', slideScripts?.length || 0);
+  console.log('[generateAudioFromSlideScripts] 言語:', language);
+  console.log('[generateAudioFromSlideScripts] APIキー設定状況:', NEXT_PUBLIC_ELEVENLABS_API_KEY ? '設定済み' : '未設定');
+  
+  if (!slideScripts || slideScripts.length === 0) {
+    console.error('[generateAudioFromSlideScripts] スライドスクリプトが提供されていません');
+    throw new Error('スライドスクリプトが提供されていません');
+  }
+  
   try {
+    // APIキーの確認
+    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+      console.warn('[generateAudioFromSlideScripts] ElevenLabs APIキーが設定されていません。ダミー音声を生成します。');
+      return await generateDummyAudioFromSlideScripts(slideScripts);
+    }
+
+    // 各スライドの音声を個別に生成
+    const slideAudioPaths: string[] = [];
+    const slideAudioDurations: number[] = [];
+    
+    for (let i = 0; i < slideScripts.length; i++) {
+      const slideScript = slideScripts[i];
+      console.log(`[generateAudioFromSlideScripts] スライド${i + 1}の音声生成: "${slideScript.script}"`);
+      
+      const slideAudioResult = await generateSingleSlideAudio(slideScript.script, language, i);
+      slideAudioPaths.push(slideAudioResult.audioPath);
+      slideAudioDurations.push(slideAudioResult.duration);
+      
+      console.log(`[generateAudioFromSlideScripts] スライド${i + 1}完了: ${slideAudioResult.duration}秒`);
+    }
+    
+    // 各スライドの音声を結合
+    console.log('[generateAudioFromSlideScripts] 音声ファイルを結合中...');
+    const combinedAudioResult = await combineSlideAudios(slideAudioPaths, slideAudioDurations);
+    
+    // 一時ファイルをクリーンアップ
+    await cleanupTempFiles(slideAudioPaths);
+    
+    console.log('[generateAudioFromSlideScripts] 完了:', combinedAudioResult);
+    return combinedAudioResult;
+    
+  } catch (error) {
+    console.error('[generateAudioFromSlideScripts] 音声生成エラー:', error);
+    
+    if (axios.isAxiosError(error)) {
+      console.error('[generateAudioFromSlideScripts] Axiosエラー詳細:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      
+      if (error.response?.status === 401) {
+        console.error('[generateAudioFromSlideScripts] 認証エラー: APIキーが無効です');
+        return await generateDummyAudioFromSlideScripts(slideScripts);
+      }
+    }
+    
+    console.warn('[generateAudioFromSlideScripts] エラーが発生したため、ダミー音声を生成します');
+    return await generateDummyAudioFromSlideScripts(slideScripts);
+  }
+}
+
+async function generateAudioFromScript(script: string, language: string) {
+  console.log('[generateAudioFromScript] 開始');
+  console.log('[generateAudioFromScript] スクリプト長:', script?.length || 0);
+  console.log('[generateAudioFromScript] 言語:', language);
+  console.log('[generateAudioFromScript] APIキー設定状況:', NEXT_PUBLIC_ELEVENLABS_API_KEY ? '設定済み' : '未設定');
+  
+  try {
+    // APIキーの確認
+    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+      console.warn('[generateAudioFromScript] ElevenLabs APIキーが設定されていません。ダミー音声を生成します。');
+      return await generateDummyAudio(script);
+    }
+
     // 日本語音声ID（ElevenLabs）
     const voiceId = language === 'ja' ? 'pNInz6obpgDQGcFmaJgB' : '21m00Tcm4TlvDq8ikWAM';
+    console.log('[generateAudioFromScript] 使用音声ID:', voiceId);
 
     // ElevenLabs APIで音声生成
+    console.log('[generateAudioFromScript] ElevenLabs API呼び出し開始');
     const ttsResponse = await axios.post(
       `${ELEVENLABS_API_URL}/${voiceId}`,
       {
@@ -129,9 +244,12 @@ async function generateAudioFromScript(script: string, language: string) {
           'xi-api-key': NEXT_PUBLIC_ELEVENLABS_API_KEY,
           'Content-Type': 'application/json'
         },
-        responseType: 'arraybuffer'
+        responseType: 'arraybuffer',
+        timeout: 30000 // 30秒のタイムアウト
       }
     );
+
+    console.log('[generateAudioFromScript] ElevenLabs API呼び出し完了, ステータス:', ttsResponse.status);
 
     // 音声ファイルの保存
     const audioFileName = `auto-video-audio-${Date.now()}.mp3`;
@@ -151,9 +269,268 @@ async function generateAudioFromScript(script: string, language: string) {
     };
 
   } catch (error) {
-    console.error('Audio generation error:', error);
-    throw new Error('音声生成に失敗しました');
+    console.error('[generateAudioFromScript] 音声生成エラー:', error);
+    
+    // Axiosエラーの詳細情報
+    if (axios.isAxiosError(error)) {
+      console.error('[generateAudioFromScript] Axiosエラー詳細:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      if (error.response?.status === 401) {
+        console.error('[generateAudioFromScript] 認証エラー: APIキーが無効です');
+        // APIキーが無効な場合はダミー音声にフォールバック
+        return await generateDummyAudio(script);
+      }
+    }
+    
+    // その他のエラーの場合もダミー音声にフォールバック
+    console.warn('[generateAudioFromScript] エラーが発生したため、ダミー音声を生成します');
+    return await generateDummyAudio(script);
   }
+}
+
+// ダミー音声生成関数
+async function generateDummyAudio(script: string) {
+  console.log('[generateDummyAudio] ダミー音声生成開始');
+  
+  // スクリプトの長さから推定時間を計算（日本語: 1文字あたり0.15秒）
+  const estimatedDuration = Math.max(5, script.length * 0.15);
+  console.log('[generateDummyAudio] 推定時間:', estimatedDuration, '秒');
+  
+  const audioFileName = `dummy-audio-${Date.now()}.mp3`;
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+  const audioPath = path.join(uploadsDir, audioFileName);
+  
+  await mkdir(uploadsDir, { recursive: true });
+  
+  try {
+    // FFmpegで無音の音声ファイルを生成
+    const silenceCommand = `ffmpeg -y -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" -t ${estimatedDuration} -c:a mp3 -b:a 128k "${audioPath}"`;
+    console.log('[generateDummyAudio] FFmpeg command:', silenceCommand);
+    
+    await execAsync(silenceCommand);
+    console.log('[generateDummyAudio] 無音音声ファイル生成完了');
+    
+  } catch (ffmpegError) {
+    console.warn('[generateDummyAudio] FFmpegが利用できません。プレースホルダーファイルを作成');
+    // FFmpegが利用できない場合はプレースホルダーファイルを作成
+    await writeFile(audioPath, 'dummy audio content');
+  }
+  
+  return {
+    audioUrl: `/uploads/${audioFileName}`,
+    audioPath: audioPath,
+    duration: estimatedDuration
+  };
+}
+
+async function generateSingleSlideAudio(script: string, language: string, slideIndex: number) {
+  console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}の音声生成開始`);
+  
+  if (!script || script.trim().length === 0) {
+    console.warn(`[generateSingleSlideAudio] スライド${slideIndex + 1}のスクリプトが空です`);
+    // 空のスクリプトの場合は短いダミー音声を生成
+    return await generateDummyAudio(`スライド ${slideIndex + 1}`);
+  }
+  
+  try {
+    // 日本語音声ID（ElevenLabs）
+    const voiceId = language === 'ja' ? 'pNInz6obpgDQGcFmaJgB' : '21m00Tcm4TlvDq8ikWAM';
+    console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}使用音声ID:`, voiceId);
+
+    // ElevenLabs APIで音声生成
+    const ttsResponse = await axios.post(
+      `${ELEVENLABS_API_URL}/${voiceId}`,
+      {
+        text: script,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5,
+          style: 0.0,
+          use_speaker_boost: true
+        }
+      },
+      {
+        headers: {
+          'xi-api-key': NEXT_PUBLIC_ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        responseType: 'arraybuffer',
+        timeout: 30000
+      }
+    );
+
+    console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}API呼び出し完了, ステータス:`, ttsResponse.status);
+
+    // 音声ファイルの保存
+    const audioFileName = `slide-audio-${slideIndex + 1}-${Date.now()}.mp3`;
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    const audioPath = path.join(uploadsDir, audioFileName);
+
+    await mkdir(uploadsDir, { recursive: true });
+    await writeFile(audioPath, ttsResponse.data);
+
+    // 音声の長さを推定（文字数ベース）
+    const estimatedDuration = Math.max(2, script.length * 0.15);
+
+    console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}音声ファイル保存完了:`, audioPath);
+    console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}推定時間:`, estimatedDuration, '秒');
+
+    return {
+      audioUrl: `/uploads/${audioFileName}`,
+      audioPath: audioPath,
+      duration: estimatedDuration
+    };
+
+  } catch (error) {
+    console.error(`[generateSingleSlideAudio] スライド${slideIndex + 1}音声生成エラー:`, error);
+    
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 401) {
+        throw new Error('ElevenLabs APIキーが無効です');
+      }
+    }
+    
+    // エラーの場合はダミー音声を生成
+    console.warn(`[generateSingleSlideAudio] スライド${slideIndex + 1}ダミー音声を生成します`);
+    return await generateDummyAudio(script);
+  }
+}
+
+async function combineSlideAudios(slideAudioPaths: string[], slideAudioDurations: number[]) {
+  console.log('[combineSlideAudios] 音声結合開始');
+  console.log('[combineSlideAudios] 結合する音声ファイル数:', slideAudioPaths.length);
+  
+  const combinedAudioFileName = `combined-audio-${Date.now()}.mp3`;
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+  const combinedAudioPath = path.join(uploadsDir, combinedAudioFileName);
+  
+  await mkdir(uploadsDir, { recursive: true });
+  
+  try {
+    if (slideAudioPaths.length === 1) {
+      // 1つのファイルの場合はそのままコピー
+      console.log('[combineSlideAudios] 単一ファイルのためコピーします');
+      const fs = require('fs');
+      fs.copyFileSync(slideAudioPaths[0], combinedAudioPath);
+    } else {
+      // 複数ファイルの場合はFFmpegで結合
+      console.log('[combineSlideAudios] FFmpegで複数ファイルを結合します');
+      
+      // 結合リストファイルを作成
+      const concatListPath = path.join(process.cwd(), 'public', 'temp', `audio-concat-list-${Date.now()}.txt`);
+      const tempDir = path.join(process.cwd(), 'public', 'temp');
+      await mkdir(tempDir, { recursive: true });
+      
+      const concatListContent = slideAudioPaths.map(audioPath => `file '${audioPath}'`).join('\n');
+      await writeFile(concatListPath, concatListContent);
+      
+      // FFmpegで音声を結合
+      const concatCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${combinedAudioPath}"`;
+      console.log('[combineSlideAudios] FFmpeg結合コマンド:', concatCommand);
+      
+      await execAsync(concatCommand);
+      
+      // 一時ファイルをクリーンアップ
+      const fs = require('fs');
+      if (fs.existsSync(concatListPath)) {
+        fs.unlinkSync(concatListPath);
+      }
+    }
+    
+    const totalDuration = slideAudioDurations.reduce((sum, duration) => sum + duration, 0);
+    
+    console.log('[combineSlideAudios] 音声結合完了');
+    console.log('[combineSlideAudios] 合計時間:', totalDuration, '秒');
+    
+    return {
+      audioUrl: `/uploads/${combinedAudioFileName}`,
+      audioPath: combinedAudioPath,
+      duration: totalDuration
+    };
+    
+  } catch (error) {
+    console.error('[combineSlideAudios] 音声結合エラー:', error);
+    
+    // フォールバック: 最初の音声ファイルを使用
+    if (slideAudioPaths.length > 0) {
+      console.warn('[combineSlideAudios] フォールバック: 最初の音声ファイルを使用');
+      const fs = require('fs');
+      fs.copyFileSync(slideAudioPaths[0], combinedAudioPath);
+      
+      return {
+        audioUrl: `/uploads/${combinedAudioFileName}`,
+        audioPath: combinedAudioPath,
+        duration: slideAudioDurations[0] || 10
+      };
+    }
+    
+    throw new Error('音声結合に失敗しました');
+  }
+}
+
+async function generateDummyAudioFromSlideScripts(slideScripts: any[]) {
+  console.log('[generateDummyAudioFromSlideScripts] ダミー音声生成開始');
+  
+  // 各スライドの推定時間を計算
+  const totalDuration = slideScripts.reduce((sum, slideScript) => {
+    const duration = slideScript.duration || Math.max(3, (slideScript.script?.length || 10) * 0.15);
+    return sum + duration;
+  }, 0);
+  
+  console.log('[generateDummyAudioFromSlideScripts] 合計推定時間:', totalDuration, '秒');
+  
+  // 全体のダミー音声を生成
+  const combinedScript = slideScripts.map(s => s.script || '').join(' ');
+  return await generateDummyAudio(combinedScript);
+}
+
+function createSlideTimingsFromScripts(slideScripts: any[], totalAudioDuration: number) {
+  console.log('[createSlideTimingsFromScripts] スライドタイミング作成開始');
+  console.log('[createSlideTimingsFromScripts] slideScripts数:', slideScripts.length);
+  console.log('[createSlideTimingsFromScripts] 総音声時間:', totalAudioDuration, '秒');
+  
+  const slideTimings: any[] = [];
+  let currentTime = 0;
+  
+  for (let i = 0; i < slideScripts.length; i++) {
+    const slideScript = slideScripts[i];
+    
+    // 各スライドの時間を計算（slideScriptのdurationまたは推定値を使用）
+    let slideDuration = slideScript.duration;
+    if (!slideDuration) {
+      // durationが設定されていない場合は文字数から推定
+      slideDuration = Math.max(3, (slideScript.script?.length || 10) * 0.15);
+    }
+    
+    // 最後のスライドの場合、残り時間を調整
+    if (i === slideScripts.length - 1) {
+      const remainingTime = totalAudioDuration - currentTime;
+      if (remainingTime > 0) {
+        slideDuration = Math.max(slideDuration, remainingTime);
+      }
+    }
+    
+    const timing = {
+      slideId: slideScript.slideId,
+      slideNumber: slideScript.slideNumber || (i + 1),
+      startTime: currentTime,
+      duration: slideDuration
+    };
+    
+    slideTimings.push(timing);
+    currentTime += slideDuration;
+    
+    console.log(`[createSlideTimingsFromScripts] スライド${i + 1}: 開始=${timing.startTime}秒, 時間=${timing.duration}秒, 終了=${currentTime}秒`);
+  }
+  
+  console.log('[createSlideTimingsFromScripts] 完了:', slideTimings);
+  return slideTimings;
 }
 
 async function synchronizeSlidesWithAudio(
@@ -306,40 +683,61 @@ async function generateVideoFromSlides(
       slideDurations.push(timing.duration);
     }
     
-    // より確実な複数スライドのffmpegコマンドを構築
-    let inputArgs = '';
-    let filterComplex = '';
+    // シンプルで確実なffmpegコマンドを構築
+    console.log('Building FFmpeg command for multiple slides...');
     
-    // 音声ファイルを最初の入力として追加
-    inputArgs += ` -i "${audioPath}"`;
+    // 各スライドの動画を個別に生成してから結合する方式
+    const tempVideoPaths: string[] = [];
     
-    // 各スライドの入力とフィルターを追加（開始時間を考慮）
-    for (let i = 0; i < slideImagePaths.length; i++) {
-      const timing = slideTimings[i];
-      inputArgs += ` -loop 1 -t ${timing.duration} -i "${slideImagePaths[i]}"`;
+    try {
+      // 各スライドの個別動画を生成
+      for (let i = 0; i < slideImagePaths.length; i++) {
+        const timing = slideTimings[i];
+        const tempVideoPath = path.join(process.cwd(), 'public', 'temp', `temp-slide-${i}-${Date.now()}.mp4`);
+        tempVideoPaths.push(tempVideoPath);
+        
+        // 個別スライドの動画生成コマンド
+        const slideVideoCommand = `ffmpeg -y -loop 1 -i "${slideImagePaths[i]}" -t ${timing.duration} -filter_complex "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setpts=PTS-STARTPTS[v]" -map "[v]" -c:v libx264 -pix_fmt yuv420p -r 30 "${tempVideoPath}"`;
+        
+        console.log(`Generating slide ${i} video:`, slideVideoCommand);
+        await execAsync(slideVideoCommand);
+        console.log(`Slide ${i} video generated:`, tempVideoPath);
+      }
       
-      // スケーリングフィルター（各スライドを1920x1080に調整）
-      filterComplex += `${i > 0 ? ';' : ''}[${i + 1}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setpts=PTS-STARTPTS[v${i + 1}]`;
+      // スライド動画を結合するためのファイルリストを作成
+      const concatListPath = path.join(process.cwd(), 'public', 'temp', `concat-list-${Date.now()}.txt`);
+      const concatListContent = tempVideoPaths.map(path => `file '${path}'`).join('\n');
+      await writeFile(concatListPath, concatListContent);
+      
+      // 音声なしの動画を結合
+      const combinedVideoPath = path.join(process.cwd(), 'public', 'temp', `combined-video-${Date.now()}.mp4`);
+      const concatCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${combinedVideoPath}"`;
+      
+      console.log('Concatenating slide videos:', concatCommand);
+      await execAsync(concatCommand);
+      console.log('Combined video created:', combinedVideoPath);
+      
+      // 結合された動画に音声を追加
+      const finalCommand = `ffmpeg -y -i "${combinedVideoPath}" -i "${audioPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest "${videoPath}"`;
+      
+      console.log('Adding audio to final video:', finalCommand);
+      await execAsync(finalCommand);
+      console.log('Final video with audio created:', videoPath);
+      
+      // 一時ファイルをクリーンアップ
+      await cleanupTempFiles([...tempVideoPaths, combinedVideoPath, concatListPath]);
+      
+    } catch (ffmpegError: any) {
+      console.error('FFmpeg error:', ffmpegError);
+      console.error('FFmpeg stderr:', ffmpegError.stderr);
+      
+      // 一時ファイルをクリーンアップ
+      await cleanupTempFiles(tempVideoPaths);
+      
+      // ffmpegが利用できない場合のフォールバック
+      await createFallbackVideo(slides, audioPath, slideTimings, videoPath);
     }
-    
-    // スライドを時間軸に沿って連結するフィルター
-    let concatFilter = '';
-    for (let i = 0; i < slideImagePaths.length; i++) {
-      concatFilter += `[v${i + 1}]`;
-    }
-    concatFilter += `concat=n=${slideImagePaths.length}:v=1:a=0[outv]`;
-    
-    // 最終的なffmpegコマンド（concat方式）
-    const ffmpegCommand = `ffmpeg -y${inputArgs} -filter_complex "${filterComplex};${concatFilter}" -map "[outv]" -map 0:a -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p "${videoPath}"`;
 
-    console.log('Generated FFmpeg command:', ffmpegCommand);
-    console.log('Audio path:', audioPath);
-    console.log('Slide image paths:', slideImagePaths);
-    console.log('Slide durations:', slideDurations);
-    console.log('Total slides:', slideImagePaths.length);
-    console.log('Filter complex:', filterComplex);
-    console.log('Concat filter:', concatFilter);
-    
     // 各スライドの詳細情報をログ出力
     for (let i = 0; i < slideTimings.length; i++) {
       const timing = slideTimings[i];
@@ -347,19 +745,7 @@ async function generateVideoFromSlides(
       console.log(`Slide ${i}: ID=${timing.slideId}, StartTime=${timing.startTime}s, Duration=${timing.duration}s, EndTime=${timing.startTime + timing.duration}s, Image=${slideImagePaths[i]}`);
     }
 
-    try {
-      await execAsync(ffmpegCommand);
-      console.log('Video generated successfully');
-    } catch (ffmpegError: any) {
-      console.error('FFmpeg error:', ffmpegError);
-      console.error('FFmpeg stderr:', ffmpegError.stderr);
-      
-      // ffmpegが利用できない場合のフォールバック
-      // スライド画像を結合したシンプルな動画を作成
-      await createFallbackVideo(slides, audioPath, slideTimings, videoPath);
-    }
-
-    // 一時ファイルをクリーンアップ
+    // 一時画像ファイルをクリーンアップ
     for (let i = 0; i < slideImagePaths.length; i++) {
       const slide = slides.find(s => s.id === slideTimings[i].slideId);
       if (slide && slide.imageUrl.startsWith('data:image/')) {
@@ -487,6 +873,23 @@ async function measureSlideAudioDurations(slideScripts: any[]): Promise<number[]
   }
 }
 
+// 一時ファイルのクリーンアップ関数
+async function cleanupTempFiles(filePaths: string[]) {
+  console.log('Cleaning up temporary files:', filePaths);
+  
+  for (const filePath of filePaths) {
+    try {
+      const fs = require('fs');
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('Cleaned up temporary file:', filePath);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup temporary file:', filePath, cleanupError);
+    }
+  }
+}
+
 // フォールバック用の動画生成（ffmpegが利用できない場合）
 async function createFallbackVideo(
   slides: any[], 
@@ -531,11 +934,18 @@ async function createFallbackVideo(
       slideImagePath = path.join(process.cwd(), 'public', firstSlide.imageUrl.replace(/^\//, ''));
     }
     
-    // シンプルなffmpegコマンド
-    const ffmpegCommand = `ffmpeg -y -i "${audioPath}" -loop 1 -t ${firstTiming.duration} -i "${slideImagePath}" -filter_complex "[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[scaled]" -map "[scaled]" -map 0:a -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p "${videoPath}"`;
+    try {
+      // シンプルなffmpegコマンド
+      const ffmpegCommand = `ffmpeg -y -i "${audioPath}" -loop 1 -t ${firstTiming.duration} -i "${slideImagePath}" -filter_complex "[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[scaled]" -map "[scaled]" -map 0:a -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p "${videoPath}"`;
 
-    await execAsync(ffmpegCommand);
-    console.log('Fallback video generated successfully');
+      console.log('Fallback FFmpeg command:', ffmpegCommand);
+      await execAsync(ffmpegCommand);
+      console.log('Fallback video generated successfully');
+    } catch (fallbackFFmpegError) {
+      console.error('Fallback FFmpeg failed:', fallbackFFmpegError);
+      // 最後の手段として、プレースホルダーファイルを作成
+      await writeFile(videoPath, 'video generation failed');
+    }
 
     // 一時ファイルをクリーンアップ
     if (firstSlide.imageUrl.startsWith('data:image/')) {

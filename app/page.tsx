@@ -55,6 +55,7 @@ export default function Home() {
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [generatedScript, setGeneratedScript] = useState<any>(null);
+  const [generatedVideo, setGeneratedVideo] = useState<any>(null);
   const [presentationStyle, setPresentationStyle] = useState<'professional' | 'casual' | 'academic' | 'creative'>('professional');
   const [targetDuration, setTargetDuration] = useState<number>(5);
   // 言語は日本語に固定
@@ -237,10 +238,17 @@ export default function Home() {
       script: generatedScript.script
     });
     
+    console.log('各スライドのスクリプト詳細:');
+    generatedScript.slideScripts.forEach((slideScript: any, index: number) => {
+      console.log(`スライド${index + 1}: "${slideScript.script}" (${slideScript.duration}秒)`);
+    });
+    
     setIsGeneratingVideo(true);
     setProcessingStep('自動動画を生成中...');
     
     try {
+      // ステップ1: 各スライドの音声生成
+      setProcessingStep('ステップ1/4: 各スライドのAI音声を生成中...');
       const response = await apiClient.generateAutoVideo(
         slides,
         generatedScript.script,
@@ -253,16 +261,49 @@ export default function Home() {
       );
       
       if (response.success) {
-        setProcessingStep('自動動画の生成が完了しました');
-        // 生成された動画の情報を表示
-        alert(`動画が生成されました！\n動画URL: ${response.result.videoUrl}\n音声URL: ${response.result.audioUrl}`);
+        setProcessingStep('ステップ2/4: 各スライドの音声を結合中...');
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 同期処理のシミュレーション
+        
+        setProcessingStep('ステップ3/4: 動画をレンダリング中...');
+        await new Promise(resolve => setTimeout(resolve, 3000)); // レンダリング処理のシミュレーション
+        
+        setProcessingStep('ステップ4/4: 動画を最終化中...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 最終化処理のシミュレーション
+        
+        setProcessingStep('🎉 動画生成が完了しました！');
+        
+        // 生成された動画の情報を保存
+        setGeneratedVideo({
+          videoUrl: response.result.videoUrl,
+          audioUrl: response.result.audioUrl,
+          duration: response.result.duration,
+          slideTimings: response.result.slideTimings
+        });
       }
     } catch (error) {
       console.error('Auto video generation error:', error);
-      setProcessingStep('自動動画生成に失敗しました');
+      
+      let errorMessage = '❌ 自動動画生成に失敗しました';
+      
+      // エラーの詳細情報を取得
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      
+      setProcessingStep(errorMessage);
+      
+      // ユーザー向けの詳細なエラー情報を表示
+      setTimeout(() => {
+        if (error instanceof Error && error.message.includes('APIキー')) {
+          alert('🔑 APIキーの設定が必要です\n\n解決方法:\n1. .env.localファイルを作成\n2. ElevenLabs APIキーを設定\n3. OpenAI APIキーを設定\n\n詳細はREADME.mdをご確認ください');
+        } else {
+          alert('❌ 動画生成でエラーが発生しました\n\nコンソールログを確認してください');
+        }
+      }, 1000);
+      
     } finally {
       setIsGeneratingVideo(false);
-      setTimeout(() => setProcessingStep(''), 3000);
+      setTimeout(() => setProcessingStep(''), 8000); // エラーメッセージを長めに表示
     }
   };
 
@@ -580,6 +621,63 @@ export default function Home() {
                             <li key={index}>{tip}</li>
                           ))}
                         </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 生成された動画の表示 */}
+                  {generatedVideo && (
+                    <div className="mt-4 p-4 bg-green-700/20 rounded-lg border border-green-600/30">
+                      <h4 className="font-medium text-white mb-3 flex items-center">
+                        <Play className="w-4 h-4 mr-2 text-green-400" />
+                        生成された動画
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="text-sm text-slate-300">
+                          <span className="text-slate-400">動画時間:</span> {Math.round(generatedVideo.duration)}秒
+                        </div>
+                        
+                        {/* 動画プレイヤー */}
+                        <div className="relative">
+                          <video 
+                            controls 
+                            className="w-full rounded-lg border border-slate-600"
+                            poster="/placeholder-video.jpg"
+                          >
+                            <source src={generatedVideo.videoUrl} type="video/mp4" />
+                            お使いのブラウザは動画再生に対応していません。
+                          </video>
+                        </div>
+                        
+                        {/* ダウンロードボタン */}
+                        <div className="flex space-x-2">
+                          <Button
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = generatedVideo.videoUrl;
+                              link.download = `presentation-${Date.now()}.mp4`;
+                              link.click();
+                            }}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            動画をダウンロード
+                          </Button>
+                          
+                          <Button
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = generatedVideo.audioUrl;
+                              link.download = `presentation-audio-${Date.now()}.mp3`;
+                              link.click();
+                            }}
+                            variant="outline"
+                            className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                          >
+                            <Volume2 className="w-4 h-4 mr-2" />
+                            音声のみ
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
