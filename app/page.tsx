@@ -279,6 +279,12 @@ export default function Home() {
           duration: response.result.duration,
           slideTimings: response.result.slideTimings
         });
+        
+        // スライドタイミングの詳細をログ出力
+        console.log('🎬 生成された動画のスライドタイミング:');
+        response.result.slideTimings.forEach((timing: any, index: number) => {
+          console.log(`スライド${index + 1}: ${timing.startTime}秒〜${timing.startTime + timing.duration}秒 (${timing.duration}秒間表示)`);
+        });
       }
     } catch (error) {
       console.error('Auto video generation error:', error);

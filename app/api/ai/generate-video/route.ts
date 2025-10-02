@@ -102,9 +102,11 @@ export async function POST(request: NextRequest) {
       duration: audioResult.duration
     });
     
-    // 2. スライドと音声を同期（個別音声なので直接slideScriptsの時間を使用）
+    // 2. スライドと音声を同期（実際の音声時間を使用）
     console.log('[generate-video] ステップ2: スライド同期開始');
-    const slideTimings = createSlideTimingsFromScripts(slideScripts, audioResult.duration);
+    const slideTimings = audioResult.slideAudioDurations 
+      ? createSlideTimingsFromActualAudioDurations(slideScripts, audioResult.slideAudioDurations)
+      : createSlideTimingsFromScripts(slideScripts, audioResult.duration);
     console.log('[generate-video] ステップ2完了: スライド同期完了', slideTimings);
     
     // 3. 動画を生成（実際の実装ではffmpegなどを使用）
@@ -375,16 +377,15 @@ async function generateSingleSlideAudio(script: string, language: string, slideI
     await mkdir(uploadsDir, { recursive: true });
     await writeFile(audioPath, ttsResponse.data);
 
-    // 音声の長さを推定（文字数ベース）
-    const estimatedDuration = Math.max(2, script.length * 0.15);
-
+    // 音声ファイルの実際の長さを取得
+    const actualDuration = await getAudioDuration(audioPath);
     console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}音声ファイル保存完了:`, audioPath);
-    console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}推定時間:`, estimatedDuration, '秒');
+    console.log(`[generateSingleSlideAudio] スライド${slideIndex + 1}実際の音声時間:`, actualDuration, '秒');
 
     return {
       audioUrl: `/uploads/${audioFileName}`,
       audioPath: audioPath,
-      duration: estimatedDuration
+      duration: actualDuration
     };
 
   } catch (error) {
@@ -443,15 +444,19 @@ async function combineSlideAudios(slideAudioPaths: string[], slideAudioDurations
       }
     }
     
-    const totalDuration = slideAudioDurations.reduce((sum, duration) => sum + duration, 0);
+    // 結合された音声ファイルの実際の長さを取得
+    const actualTotalDuration = await getAudioDuration(combinedAudioPath);
+    const calculatedTotalDuration = slideAudioDurations.reduce((sum, duration) => sum + duration, 0);
     
     console.log('[combineSlideAudios] 音声結合完了');
-    console.log('[combineSlideAudios] 合計時間:', totalDuration, '秒');
+    console.log('[combineSlideAudios] 計算上の合計時間:', calculatedTotalDuration, '秒');
+    console.log('[combineSlideAudios] 実際の合計時間:', actualTotalDuration, '秒');
     
     return {
       audioUrl: `/uploads/${combinedAudioFileName}`,
       audioPath: combinedAudioPath,
-      duration: totalDuration
+      duration: actualTotalDuration,
+      slideAudioDurations: slideAudioDurations // 各スライドの実際の音声時間も返す
     };
     
   } catch (error) {
@@ -466,7 +471,8 @@ async function combineSlideAudios(slideAudioPaths: string[], slideAudioDurations
       return {
         audioUrl: `/uploads/${combinedAudioFileName}`,
         audioPath: combinedAudioPath,
-        duration: slideAudioDurations[0] || 10
+        duration: slideAudioDurations[0] || 10,
+        slideAudioDurations: slideAudioDurations
       };
     }
     
@@ -477,21 +483,112 @@ async function combineSlideAudios(slideAudioPaths: string[], slideAudioDurations
 async function generateDummyAudioFromSlideScripts(slideScripts: any[]) {
   console.log('[generateDummyAudioFromSlideScripts] ダミー音声生成開始');
   
-  // 各スライドの推定時間を計算
-  const totalDuration = slideScripts.reduce((sum, slideScript) => {
-    const duration = slideScript.duration || Math.max(3, (slideScript.script?.length || 10) * 0.15);
-    return sum + duration;
-  }, 0);
+  // 各スライドの個別ダミー音声を生成
+  const slideAudioPaths: string[] = [];
+  const slideAudioDurations: number[] = [];
   
-  console.log('[generateDummyAudioFromSlideScripts] 合計推定時間:', totalDuration, '秒');
+  for (let i = 0; i < slideScripts.length; i++) {
+    const slideScript = slideScripts[i];
+    const script = slideScript.script || `スライド ${i + 1}`;
+    
+    console.log(`[generateDummyAudioFromSlideScripts] スライド${i + 1}のダミー音声生成: "${script}"`);
+    
+    const dummyAudioResult = await generateDummyAudio(script);
+    slideAudioPaths.push(dummyAudioResult.audioPath);
+    slideAudioDurations.push(dummyAudioResult.duration);
+  }
   
-  // 全体のダミー音声を生成
-  const combinedScript = slideScripts.map(s => s.script || '').join(' ');
-  return await generateDummyAudio(combinedScript);
+  // 各スライドの音声を結合
+  const combinedAudioResult = await combineSlideAudios(slideAudioPaths, slideAudioDurations);
+  
+  // 一時ファイルをクリーンアップ
+  await cleanupTempFiles(slideAudioPaths);
+  
+  return combinedAudioResult;
+}
+
+async function getAudioDuration(audioPath: string): Promise<number> {
+  console.log('[getAudioDuration] 音声ファイルの長さを取得中:', audioPath);
+  
+  try {
+    // FFprobeを使って音声ファイルの実際の長さを取得
+    const probeCommand = `ffprobe -v quiet -print_format json -show_format "${audioPath}"`;
+    console.log('[getAudioDuration] FFprobeコマンド:', probeCommand);
+    
+    const { stdout } = await execAsync(probeCommand);
+    const probeResult = JSON.parse(stdout);
+    
+    const duration = parseFloat(probeResult.format?.duration || '0');
+    console.log('[getAudioDuration] 取得した音声時間:', duration, '秒');
+    
+    if (duration <= 0) {
+      console.warn('[getAudioDuration] 無効な音声時間が検出されました。推定値を使用します');
+      return 5; // フォールバック値
+    }
+    
+    return duration;
+    
+  } catch (error) {
+    console.error('[getAudioDuration] 音声時間取得エラー:', error);
+    
+    // フォールバック: ファイルサイズから推定
+    try {
+      const fs = require('fs');
+      const stats = fs.statSync(audioPath);
+      const fileSizeKB = stats.size / 1024;
+      
+      // MP3の平均ビットレート128kbpsを仮定して推定
+      // 128kbps = 16KB/秒
+      const estimatedDuration = Math.max(1, fileSizeKB / 16);
+      
+      console.log('[getAudioDuration] ファイルサイズから推定:', estimatedDuration, '秒');
+      return estimatedDuration;
+      
+    } catch (fallbackError) {
+      console.error('[getAudioDuration] フォールバック推定も失敗:', fallbackError);
+      return 5; // 最終フォールバック
+    }
+  }
+}
+
+function createSlideTimingsFromActualAudioDurations(slideScripts: any[], slideAudioDurations: number[]) {
+  console.log('[createSlideTimingsFromActualAudioDurations] スライドタイミング作成開始');
+  console.log('[createSlideTimingsFromActualAudioDurations] slideScripts数:', slideScripts.length);
+  console.log('[createSlideTimingsFromActualAudioDurations] 実際の音声時間:', slideAudioDurations);
+  
+  const slideTimings: any[] = [];
+  let currentTime = 0;
+  
+  for (let i = 0; i < slideScripts.length; i++) {
+    const slideScript = slideScripts[i];
+    
+    // 実際の音声時間を使用（フォールバックとして推定値も用意）
+    let slideDuration = slideAudioDurations[i];
+    if (!slideDuration || slideDuration <= 0) {
+      // 実際の音声時間が取得できない場合のフォールバック
+      slideDuration = slideScript.duration || Math.max(3, (slideScript.script?.length || 10) * 0.15);
+      console.warn(`[createSlideTimingsFromActualAudioDurations] スライド${i + 1}: 実際の音声時間が取得できないため推定値を使用: ${slideDuration}秒`);
+    }
+    
+    const timing = {
+      slideId: slideScript.slideId,
+      slideNumber: slideScript.slideNumber || (i + 1),
+      startTime: currentTime,
+      duration: slideDuration
+    };
+    
+    slideTimings.push(timing);
+    currentTime += slideDuration;
+    
+    console.log(`[createSlideTimingsFromActualAudioDurations] スライド${i + 1}: 開始=${timing.startTime}秒, 実際の音声時間=${timing.duration}秒, 終了=${currentTime}秒`);
+  }
+  
+  console.log('[createSlideTimingsFromActualAudioDurations] 完了:', slideTimings);
+  return slideTimings;
 }
 
 function createSlideTimingsFromScripts(slideScripts: any[], totalAudioDuration: number) {
-  console.log('[createSlideTimingsFromScripts] スライドタイミング作成開始');
+  console.log('[createSlideTimingsFromScripts] スライドタイミング作成開始（推定値ベース）');
   console.log('[createSlideTimingsFromScripts] slideScripts数:', slideScripts.length);
   console.log('[createSlideTimingsFromScripts] 総音声時間:', totalAudioDuration, '秒');
   
@@ -693,6 +790,7 @@ async function generateVideoFromSlides(
       // 各スライドの個別動画を生成
       for (let i = 0; i < slideImagePaths.length; i++) {
         const timing = slideTimings[i];
+        console.log('Processing slide timing for slide in generateVideoFromSlides:', i, timing);
         const tempVideoPath = path.join(process.cwd(), 'public', 'temp', `temp-slide-${i}-${Date.now()}.mp4`);
         tempVideoPaths.push(tempVideoPath);
         
