@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.NEXT_PUBLIC_OPENAI_API_KEY) {
       return NextResponse.json(
         { error: 'OpenAI APIキーが設定されていません' },
         { status: 500 }
