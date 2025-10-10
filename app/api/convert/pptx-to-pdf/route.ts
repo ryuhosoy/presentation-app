@@ -28,8 +28,8 @@ export async function POST(request: NextRequest) {
     // ConvertAPIクライアントを初期化
     const convertApi = new ConvertApi(convertApiSecret);
 
-    // 一時ディレクトリを作成
-    const tempDir = path.join(process.cwd(), 'temp');
+    // 一時ディレクトリを作成（サーバーレス環境対応）
+    const tempDir = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'temp');
     await fs.mkdir(tempDir, { recursive: true });
     
     // ファイルを一時保存
@@ -46,8 +46,10 @@ export async function POST(request: NextRequest) {
       
       console.log('ConvertAPI conversion successful');
       
-      // 公開ディレクトリに保存
-      const publicDir = path.join(process.cwd(), 'public', 'converted');
+      // 公開ディレクトリに保存（サーバーレス環境対応）
+      const publicDir = process.env.VERCEL 
+        ? path.join('/tmp', 'converted')
+        : path.join(process.cwd(), 'public', 'converted');
       await fs.mkdir(publicDir, { recursive: true });
       
       // ConvertAPIの結果を直接保存
@@ -74,7 +76,9 @@ export async function POST(request: NextRequest) {
       // ConvertAPIが失敗した場合のフォールバック
       console.log('Using fallback method - returning original PPTX file');
       
-      const publicDir = path.join(process.cwd(), 'public', 'uploads');
+      const publicDir = process.env.VERCEL 
+        ? path.join('/tmp', 'uploads')
+        : path.join(process.cwd(), 'public', 'uploads');
       await fs.mkdir(publicDir, { recursive: true });
       
       const publicFilePath = path.join(publicDir, `fallback-${Date.now()}.pptx`);

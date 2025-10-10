@@ -24,7 +24,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Create uploads directory
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    const uploadsDir = process.env.VERCEL 
+      ? path.join('/tmp', 'uploads')
+      : path.join(process.cwd(), 'public', 'uploads');
     await mkdir(uploadsDir, { recursive: true });
 
     // Save file

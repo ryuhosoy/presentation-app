@@ -27,8 +27,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 一時ディレクトリを作成
-    const tempDir = path.join(process.cwd(), 'temp', `pptx-${Date.now()}`);
+    // 一時ディレクトリを作成（サーバーレス環境対応）
+    const tempDir = path.join(
+      process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'temp'),
+      `pptx-${Date.now()}`
+    );
     await fs.mkdir(tempDir, { recursive: true });
 
     // ファイルを保存
