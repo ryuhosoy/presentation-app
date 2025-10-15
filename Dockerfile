@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 全ての依存関係をインストール（ビルドに必要な開発依存関係を含む）
-RUN npm ci
+RUN npm install
 
 # アプリケーションのソースコードをコピー
 COPY . .
@@ -41,7 +41,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 本番依存関係のみインストール
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # ビルドステージから必要なファイルをコピー
 COPY --from=builder /app/.next ./.next
