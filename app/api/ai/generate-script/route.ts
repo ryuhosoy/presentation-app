@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// OpenAIクライアントの初期化
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-});
+// OpenAIクライアントを取得する関数（遅延初期化）
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+  });
+}
 
 interface SlideContent {
   id: string;
@@ -119,6 +121,7 @@ ${slidesContent}
   "presentationTips": ["プレゼンテーションのコツ1", "コツ2", "コツ3"]
 }`;
 
+    const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
 import axios from 'axios';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
@@ -7,11 +6,6 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-
-// OpenAIクライアントの初期化
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-});
 
 // ElevenLabs API設定
 const NEXT_PUBLIC_ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_NEXT_PUBLIC_ELEVENLABS_API_KEY;
