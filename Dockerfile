@@ -45,20 +45,16 @@ RUN npm install --only=production
 
 # ビルドステージから必要なファイルをコピー
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.js ./next.config.js
-
-# サーバーファイルをコピー
-COPY server ./server
 
 # その他の必要なファイルをコピー
 COPY components ./components
 COPY lib ./lib
 COPY app ./app
 
-# 必要なディレクトリを作成
-RUN mkdir -p server/uploads server/output server/projects && \
-    chmod -R 755 server/uploads server/output server/projects
+# 必要なディレクトリを作成（アップロードや出力用）
+RUN mkdir -p public/uploads public/output public/temp && \
+    chmod -R 755 public
 
 # 非rootユーザーを作成して実行
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \
@@ -66,8 +62,8 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser && \
 
 USER appuser
 
-# ポート3000（Next.js）と3001（Expressサーバー）を公開
-EXPOSE 3000 3001
+# ポート3000（Next.js）を公開
+EXPOSE 3000
 
 # 環境変数を設定
 ENV NODE_ENV=production
@@ -75,7 +71,7 @@ ENV PORT=3000
 
 # ヘルスチェックを追加
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# 起動スクリプトを作成して両方のサーバーを起動
-CMD ["sh", "-c", "node server/index.js & npm start"]
+# Next.jsアプリケーションを起動
+CMD ["npm", "start"]
