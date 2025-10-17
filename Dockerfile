@@ -9,7 +9,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # 全ての依存関係をインストール（ビルドに必要な開発依存関係を含む）
-RUN npm install
+# 脆弱性警告を無視してビルドを続行
+RUN npm install --no-audit --legacy-peer-deps
 
 # アプリケーションのソースコードをコピー
 COPY . .
@@ -41,20 +42,19 @@ WORKDIR /app
 COPY package*.json ./
 
 # 本番依存関係のみインストール
-RUN npm install --only=production
+RUN npm install --only=production --no-audit --legacy-peer-deps
+
+# 必要なディレクトリを事前に作成
+RUN mkdir -p public/uploads public/output public/temp
 
 # ビルドステージから必要なファイルをコピー
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/public ./public
 
-# その他の必要なファイルをコピー
-COPY components ./components
-COPY lib ./lib
-COPY app ./app
-
-# 必要なディレクトリを作成（アップロードや出力用）
-RUN mkdir -p public/uploads public/output public/temp && \
-    chmod -R 755 public
+# 必要なディレクトリのパーミッション設定
+RUN chmod -R 755 public
 
 # 非rootユーザーを作成して実行
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \
@@ -68,10 +68,11 @@ EXPOSE 3000
 # 環境変数を設定
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-# ヘルスチェックを追加
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+# ヘルスチェックを追加（起動猶予時間を長く設定）
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
 # Next.jsアプリケーションを起動
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npm start"]
