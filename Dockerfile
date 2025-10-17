@@ -72,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
   CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
 # Next.jsアプリケーションを起動
-CMD ["sh", "-c", "npm start"]
+CMD ["sh", "-c", "npm run start"]
