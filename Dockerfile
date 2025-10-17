@@ -44,21 +44,29 @@ COPY package*.json ./
 # 本番依存関係のみインストール
 RUN npm install --only=production
 
+# 必要なディレクトリを事前に作成
+RUN mkdir -p public/uploads public/output public/temp
 
 # ビルドステージから必要なファイルをコピー
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/public ./public
 
 # その他の必要なファイルをコピー
 COPY components ./components
 COPY lib ./lib
 COPY app ./app
 
-# 非rootユーザーを作成して実行
-RUN groupadd -r appuser && useradd -r -g appuser appuser && \
-    chown -R appuser:appuser /app
+# 非rootユーザーを作成（ホームディレクトリ付き）
+RUN groupadd -r appuser && \
+    useradd -r -g appuser -m -d /home/appuser appuser && \
+    mkdir -p /home/appuser/.cache /home/appuser/.config && \
+    chown -R appuser:appuser /app /home/appuser
 
 USER appuser
+
+# LibreOffice用の環境変数を設定
+ENV HOME=/home/appuser
 
 # ポート3000（Next.js）を公開
 EXPOSE 3000
@@ -66,6 +74,7 @@ EXPOSE 3000
 # 環境変数を設定
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 # ヘルスチェックを追加（起動猶予時間を長く設定）
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
