@@ -90,8 +90,16 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
 
 # 起動スクリプトを作成
 RUN echo '#!/bin/bash\n\
-# 仮想ディスプレイを起動\n\
-Xvfb :99 -screen 0 1024x768x24 &\n\
+# 既存のXvfbプロセスをクリーンアップ\n\
+if [ -f /tmp/.X99-lock ]; then\n\
+    rm -f /tmp/.X99-lock\n\
+fi\n\
+# 既存のXvfbプロセスを終了\n\
+pkill -f "Xvfb :99" || true\n\
+# 仮想ディスプレイを起動（バックグラウンドで実行）\n\
+Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &\n\
+# 少し待機してからDBusセッションを開始\n\
+sleep 2\n\
 # DBusセッションを開始\n\
 dbus-daemon --session --address=unix:path=/tmp/dbus-session --nofork --nopidfile &\n\
 # アプリケーションを起動\n\
