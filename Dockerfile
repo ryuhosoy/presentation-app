@@ -34,6 +34,10 @@ RUN apt-get update && apt-get install -y \
     fonts-noto-cjk \
     fonts-noto-cjk-extra \
     ffmpeg \
+    default-jre \
+    default-jdk \
+    dbus-x11 \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -50,7 +54,6 @@ RUN mkdir -p public/uploads public/output public/temp
 # ビルドステージから必要なファイルをコピー
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.js ./next.config.js
-COPY --from=builder /app/public ./public
 
 # その他の必要なファイルをコピー
 COPY components ./components
@@ -60,13 +63,18 @@ COPY app ./app
 # 非rootユーザーを作成（ホームディレクトリ付き）
 RUN groupadd -r appuser && \
     useradd -r -g appuser -m -d /home/appuser appuser && \
-    mkdir -p /home/appuser/.cache /home/appuser/.config && \
-    chown -R appuser:appuser /app /home/appuser
+    mkdir -p /home/appuser/.cache /home/appuser/.config /home/appuser/.cache/dconf && \
+    chown -R appuser:appuser /app /home/appuser && \
+    chmod -R 755 /home/appuser/.cache
 
 USER appuser
 
 # LibreOffice用の環境変数を設定
 ENV HOME=/home/appuser
+ENV DISPLAY=:99
+ENV JAVA_HOME=/usr/lib/jvm/default-java
+ENV LIBREOFFICE_HEADLESS=1
+ENV DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/dbus-session
 
 # ポート3000（Next.js）を公開
 EXPOSE 3000
@@ -80,5 +88,14 @@ ENV HOSTNAME=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
   CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
+# 起動スクリプトを作成
+RUN echo '#!/bin/bash\n\
+# 仮想ディスプレイを起動\n\
+Xvfb :99 -screen 0 1024x768x24 &\n\
+# DBusセッションを開始\n\
+dbus-daemon --session --address=unix:path=/tmp/dbus-session --nofork --nopidfile &\n\
+# アプリケーションを起動\n\
+npm run start' > /app/start.sh && chmod +x /app/start.sh
+
 # Next.jsアプリケーションを起動
-CMD ["sh", "-c", "npm run start"]
+CMD ["/app/start.sh"]
