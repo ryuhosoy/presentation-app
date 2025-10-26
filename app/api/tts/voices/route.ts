@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 
-const NEXT_PUBLIC_ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+// const NEXT_PUBLIC_ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+const NEXT_PUBLIC_ELEVENLABS_API_KEY = "sk_7e9347471e093ae4cca19715fa0b4c1134f16f20a1288a3b";
 const ELEVENLABS_VOICES_URL = 'https://api.elevenlabs.io/v1/voices';
 
 export async function GET(request: NextRequest) {
