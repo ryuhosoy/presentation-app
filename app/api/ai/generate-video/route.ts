@@ -145,6 +145,10 @@ async function generateAudioFromSlideScripts(slideScripts: any[], language: stri
   console.log('[generateAudioFromSlideScripts] スライドスクリプト数:', slideScripts?.length || 0);
   console.log('[generateAudioFromSlideScripts] 言語:', language);
   console.log('[generateAudioFromSlideScripts] APIキー設定状況:', NEXT_PUBLIC_ELEVENLABS_API_KEY ? '設定済み' : '未設定');
+
+  if (NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+    console.log('NEXT_PUBLIC_ELEVENLABS_API_KEY:', NEXT_PUBLIC_ELEVENLABS_API_KEY);
+  }
   
   if (!slideScripts || slideScripts.length === 0) {
     console.error('[generateAudioFromSlideScripts] スライドスクリプトが提供されていません');
