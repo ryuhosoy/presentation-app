@@ -4,7 +4,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
 // ElevenLabs API設定
-const NEXT_PUBLIC_ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_NEXT_PUBLIC_ELEVENLABS_API_KEY;
+const NEXT_PUBLIC_ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
 // 利用可能な音声ID（ElevenLabsのデフォルト音声）
