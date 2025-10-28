@@ -41,7 +41,7 @@ npm install
 NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
 
 # ElevenLabs API Configuration (必須 - 音声生成用)
-NEXT_PUBLIC_ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
+ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 
 # Google Cloud (オプション - 音声認識の精度向上)
 GOOGLE_CLOUD_PROJECT_ID=your_google_cloud_project_id
@@ -79,7 +79,7 @@ sudo apt update && sudo apt install ffmpeg
 1. [ElevenLabs](https://elevenlabs.io/)にアクセス
 2. アカウントを作成またはログイン
 3. APIキーを生成
-4. `.env.local`ファイルに`NEXT_PUBLIC_ELEVENLABS_API_KEY`として設定
+4. `.env.local`ファイルに`ELEVENLABS_API_KEY`として設定
 
 ### 5. 開発サーバーの起動
 

@@ -8,8 +8,8 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 // ElevenLabs API設定
-// const NEXT_PUBLIC_ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-const NEXT_PUBLIC_ELEVENLABS_API_KEY = "sk_7e9347471e093ae4cca19715fa0b4c1134f16f20a1288a3b";
+// const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVENLABS_API_KEY = "sk_7e9347471e093ae4cca19715fa0b4c1134f16f20a1288a3b";
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
 interface VideoGenerationRequest {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ElevenLabs APIキーの警告（エラーではなく警告に変更）
-    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+    if (!ELEVENLABS_API_KEY) {
       console.warn('[generate-video] ElevenLabs APIキーが設定されていません。ダミー音声を使用します。');
     }
 
@@ -145,10 +145,10 @@ async function generateAudioFromSlideScripts(slideScripts: any[], language: stri
   console.log('[generateAudioFromSlideScripts] 開始');
   console.log('[generateAudioFromSlideScripts] スライドスクリプト数:', slideScripts?.length || 0);
   console.log('[generateAudioFromSlideScripts] 言語:', language);
-  console.log('[generateAudioFromSlideScripts] APIキー設定状況:', NEXT_PUBLIC_ELEVENLABS_API_KEY ? '設定済み' : '未設定');
+  console.log('[generateAudioFromSlideScripts] APIキー設定状況:', ELEVENLABS_API_KEY ? '設定済み' : '未設定');
 
-  if (NEXT_PUBLIC_ELEVENLABS_API_KEY) {
-    console.log('NEXT_PUBLIC_ELEVENLABS_API_KEY:', NEXT_PUBLIC_ELEVENLABS_API_KEY);
+  if (ELEVENLABS_API_KEY) {
+    console.log('ELEVENLABS_API_KEY:', ELEVENLABS_API_KEY);
   }
   
   if (!slideScripts || slideScripts.length === 0) {
@@ -158,7 +158,7 @@ async function generateAudioFromSlideScripts(slideScripts: any[], language: stri
   
   try {
     // APIキーの確認
-    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+    if (!ELEVENLABS_API_KEY) {
       console.warn('[generateAudioFromSlideScripts] ElevenLabs APIキーが設定されていません。ダミー音声を生成します。');
       return await generateDummyAudioFromSlideScripts(slideScripts);
     }
@@ -213,11 +213,11 @@ async function generateAudioFromScript(script: string, language: string) {
   console.log('[generateAudioFromScript] 開始');
   console.log('[generateAudioFromScript] スクリプト長:', script?.length || 0);
   console.log('[generateAudioFromScript] 言語:', language);
-  console.log('[generateAudioFromScript] APIキー設定状況:', NEXT_PUBLIC_ELEVENLABS_API_KEY ? '設定済み' : '未設定');
+  console.log('[generateAudioFromScript] APIキー設定状況:', ELEVENLABS_API_KEY ? '設定済み' : '未設定');
   
   try {
     // APIキーの確認
-    if (!NEXT_PUBLIC_ELEVENLABS_API_KEY) {
+    if (!ELEVENLABS_API_KEY) {
       console.warn('[generateAudioFromScript] ElevenLabs APIキーが設定されていません。ダミー音声を生成します。');
       return await generateDummyAudio(script);
     }
@@ -242,7 +242,7 @@ async function generateAudioFromScript(script: string, language: string) {
       },
       {
         headers: {
-          'xi-api-key': NEXT_PUBLIC_ELEVENLABS_API_KEY,
+          'xi-api-key': ELEVENLABS_API_KEY,
           'Content-Type': 'application/json'
         },
         responseType: 'arraybuffer',
@@ -362,7 +362,7 @@ async function generateSingleSlideAudio(script: string, language: string, slideI
       },
       {
         headers: {
-          'xi-api-key': NEXT_PUBLIC_ELEVENLABS_API_KEY,
+          'xi-api-key': ELEVENLABS_API_KEY,
           'Content-Type': 'application/json'
         },
         responseType: 'arraybuffer',
@@ -929,7 +929,7 @@ async function measureSlideAudioDurations(slideScripts: any[]): Promise<number[]
           headers: {
             'Accept': 'audio/mpeg',
             'Content-Type': 'application/json',
-            'xi-api-key': process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || ''
+            'xi-api-key': process.env.ELEVENLABS_API_KEY || ''
           },
           body: JSON.stringify({
             text: slideScript.script,
