@@ -38,7 +38,7 @@ npm install
 
 ```env
 # OpenAI API Configuration (必須 - AIスクリプト生成用)
-NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 
 # ElevenLabs API Configuration (必須 - 音声生成用)
 ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
@@ -73,7 +73,7 @@ sudo apt update && sudo apt install ffmpeg
 1. [OpenAI Platform](https://platform.openai.com/)にアクセス
 2. アカウントを作成またはログイン
 3. APIキーを生成
-4. `.env.local`ファイルに`NEXT_PUBLIC_OPENAI_API_KEY`として設定
+4. `.env.local`ファイルに`OPENAI_API_KEY`として設定
 
 #### ElevenLabs APIキー
 1. [ElevenLabs](https://elevenlabs.io/)にアクセス

@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 // OpenAIクライアントを取得する関数（遅延初期化）
 function getOpenAIClient() {
   return new OpenAI({
-    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+    apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
   });
 }
 
