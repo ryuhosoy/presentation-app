@@ -6,7 +6,7 @@ import path from 'path';
 // ElevenLabs API設定
 // Renderでは NEXT_PUBLIC_ プレフィックスの環境変数がAPI Routesで使えない場合があるため、
 // プレフィックスなしの環境変数を使用（両方対応）
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVENLABS_API_KEY = 'sk_a5fd58743122f4e1d79b7d198309d88e32d49d34c8bcffe8';
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
 // 利用可能な音声ID（ElevenLabsのデフォルト音声）
