@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 // OpenAIクライアントを取得する関数（遅延初期化）
 function getOpenAIClient() {
   return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || '',
+    apiKey: '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',
   });
 }
 
