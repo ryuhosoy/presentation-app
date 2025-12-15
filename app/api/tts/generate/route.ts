@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     // 音声ファイルの保存
     const audioFileName = `tts-${Date.now()}.mp3`;
-    const uploadsDir = process.env.VERCEL 
+    const uploadsDir = process.env.NODE_ENV === 'production'
       ? path.join('/tmp', 'uploads')
       : path.join(process.cwd(), 'public', 'uploads');
     const audioPath = path.join(uploadsDir, audioFileName);

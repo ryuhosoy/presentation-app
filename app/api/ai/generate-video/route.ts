@@ -255,7 +255,7 @@ async function generateAudioFromScript(script: string, language: string) {
 
     // 音声ファイルの保存
     const audioFileName = `auto-video-audio-${Date.now()}.mp3`;
-    const uploadsDir = process.env.VERCEL 
+    const uploadsDir = process.env.NODE_ENV === 'production'
     ? path.join('/tmp', 'uploads')
     : path.join(process.cwd(), 'public', 'uploads');
     const audioPath = path.join(uploadsDir, audioFileName);
@@ -306,7 +306,7 @@ async function generateDummyAudio(script: string) {
   console.log('[generateDummyAudio] 推定時間:', estimatedDuration, '秒');
   
   const audioFileName = `dummy-audio-${Date.now()}.mp3`;
-  const uploadsDir = process.env.VERCEL 
+  const uploadsDir = process.env.NODE_ENV === 'production'
     ? path.join('/tmp', 'uploads')
     : path.join(process.cwd(), 'public', 'uploads');
   const audioPath = path.join(uploadsDir, audioFileName);
@@ -375,7 +375,7 @@ async function generateSingleSlideAudio(script: string, language: string, slideI
 
     // 音声ファイルの保存
     const audioFileName = `slide-audio-${slideIndex + 1}-${Date.now()}.mp3`;
-    const uploadsDir = process.env.VERCEL 
+    const uploadsDir = process.env.NODE_ENV === 'production'
     ? path.join('/tmp', 'uploads')
     : path.join(process.cwd(), 'public', 'uploads');
     const audioPath = path.join(uploadsDir, audioFileName);
@@ -414,7 +414,7 @@ async function combineSlideAudios(slideAudioPaths: string[], slideAudioDurations
   console.log('[combineSlideAudios] 結合する音声ファイル数:', slideAudioPaths.length);
   
   const combinedAudioFileName = `combined-audio-${Date.now()}.mp3`;
-  const uploadsDir = process.env.VERCEL 
+  const uploadsDir = process.env.NODE_ENV === 'production'
     ? path.join('/tmp', 'uploads')
     : path.join(process.cwd(), 'public', 'uploads');
   const combinedAudioPath = path.join(uploadsDir, combinedAudioFileName);
@@ -432,7 +432,7 @@ async function combineSlideAudios(slideAudioPaths: string[], slideAudioDurations
       console.log('[combineSlideAudios] FFmpegで複数ファイルを結合します');
       
       // 結合リストファイルを作成
-      const tempDir = process.env.VERCEL 
+      const tempDir = process.env.NODE_ENV === 'production'
         ? path.join('/tmp', 'temp')
         : path.join(process.cwd(), 'public', 'temp');
       const concatListPath = path.join(tempDir, `audio-concat-list-${Date.now()}.txt`);
@@ -744,7 +744,7 @@ async function generateVideoFromSlides(
 ) {
   try {
     const videoFileName = `auto-video-${Date.now()}.mp4`;
-    const outputDir = process.env.VERCEL 
+    const outputDir = process.env.NODE_ENV === 'production'
       ? path.join('/tmp', 'output')
       : path.join(process.cwd(), 'public', 'output');
     const videoPath = path.join(outputDir, videoFileName);
@@ -772,7 +772,7 @@ async function generateVideoFromSlides(
       if (slide.imageUrl.startsWith('data:image/')) {
         // base64画像の場合、一時ファイルとして保存
         const imageFileName = `slide-${slide.id}-${i}-${Date.now()}.png`;
-        const imageDir = process.env.VERCEL 
+        const imageDir = process.env.NODE_ENV === 'production'
           ? path.join('/tmp', 'temp')
           : path.join(process.cwd(), 'public', 'temp');
         await mkdir(imageDir, { recursive: true });
@@ -787,7 +787,7 @@ async function generateVideoFromSlides(
         console.log(`Saved base64 image ${i} to:`, imagePath);
       } else {
         // 通常のファイルパスの場合
-        imagePath = process.env.VERCEL 
+        imagePath = process.env.NODE_ENV === 'production'
           ? path.join('/tmp', slide.imageUrl.replace(/^\//, ''))
           : path.join(process.cwd(), 'public', slide.imageUrl.replace(/^\//, ''));
       }
@@ -807,7 +807,7 @@ async function generateVideoFromSlides(
       for (let i = 0; i < slideImagePaths.length; i++) {
         const timing = slideTimings[i];
         console.log('Processing slide timing for slide in generateVideoFromSlides:', i, timing);
-        const tempDir = process.env.VERCEL 
+        const tempDir = process.env.NODE_ENV === 'production'
           ? path.join('/tmp', 'temp')
           : path.join(process.cwd(), 'public', 'temp');
         const tempVideoPath = path.join(tempDir, `temp-slide-${i}-${Date.now()}.mp4`);
@@ -822,7 +822,7 @@ async function generateVideoFromSlides(
       }
       
       // スライド動画を結合するためのファイルリストを作成
-      const tempDir = process.env.VERCEL 
+      const tempDir = process.env.NODE_ENV === 'production'
         ? path.join('/tmp', 'temp')
         : path.join(process.cwd(), 'public', 'temp');
       const concatListPath = path.join(tempDir, `concat-list-${Date.now()}.txt`);
@@ -951,7 +951,7 @@ async function measureSlideAudioDurations(slideScripts: any[]): Promise<number[]
         const audioArray = new Uint8Array(audioBuffer);
         
         // 音声ファイルを一時保存して長さを測定
-        const tempDir = process.env.VERCEL 
+        const tempDir = process.env.NODE_ENV === 'production'
           ? path.join('/tmp', 'temp')
           : path.join(process.cwd(), 'public', 'temp');
         const tempAudioPath = path.join(tempDir, `temp-audio-${i}-${Date.now()}.mp3`);
@@ -1041,7 +1041,7 @@ async function createFallbackVideo(
     if (firstSlide.imageUrl.startsWith('data:image/')) {
       // base64画像の場合、一時ファイルとして保存
       const imageFileName = `slide-${firstSlide.id}-${Date.now()}.png`;
-      const imageDir = process.env.VERCEL 
+      const imageDir = process.env.NODE_ENV === 'production'
         ? path.join('/tmp', 'temp')
         : path.join(process.cwd(), 'public', 'temp');
       await mkdir(imageDir, { recursive: true });
@@ -1056,7 +1056,7 @@ async function createFallbackVideo(
       console.log('Saved base64 image to:', slideImagePath);
     } else {
       // 通常のファイルパスの場合
-      slideImagePath = process.env.VERCEL 
+      slideImagePath = process.env.NODE_ENV === 'production'
         ? path.join('/tmp', firstSlide.imageUrl.replace(/^\//, ''))
         : path.join(process.cwd(), 'public', firstSlide.imageUrl.replace(/^\//, ''));
     }

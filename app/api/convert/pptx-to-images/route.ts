@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // 一時ディレクトリを作成（サーバーレス環境対応）
     const tempDir = path.join(
-      process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'temp'),
+      process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'temp'),
       `pptx-${Date.now()}`
     );
     await fs.mkdir(tempDir, { recursive: true });

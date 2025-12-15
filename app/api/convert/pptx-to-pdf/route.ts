@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const convertApi = new ConvertApi(convertApiSecret);
 
     // 一時ディレクトリを作成（サーバーレス環境対応）
-    const tempDir = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'temp');
+    const tempDir = process.env.NODE_ENV === 'production' ? '/tmp' : path.join(process.cwd(), 'temp');
     await fs.mkdir(tempDir, { recursive: true });
     
     // ファイルを一時保存
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       console.log('ConvertAPI conversion successful');
       
       // 公開ディレクトリに保存（サーバーレス環境対応）
-      const publicDir = process.env.VERCEL 
+      const publicDir = process.env.NODE_ENV === 'production'
         ? path.join('/tmp', 'converted')
         : path.join(process.cwd(), 'public', 'converted');
       await fs.mkdir(publicDir, { recursive: true });
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       // ConvertAPIが失敗した場合のフォールバック
       console.log('Using fallback method - returning original PPTX file');
       
-      const publicDir = process.env.VERCEL 
+      const publicDir = process.env.NODE_ENV === 'production'
         ? path.join('/tmp', 'uploads')
         : path.join(process.cwd(), 'public', 'uploads');
       await fs.mkdir(publicDir, { recursive: true });
