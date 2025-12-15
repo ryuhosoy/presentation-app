@@ -46,12 +46,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: 'OpenAI APIキーが設定されていません' },
-        { status: 500 }
-      );
-    }
+    // if (!process.env.OPENAI_API_KEY) {
+    //   return NextResponse.json(
+    //     { error: 'OpenAI APIキーが設定されていません' },
+    //     { status: 500 }
+    //   );
+    // }
 
     // スライド内容を分析してスクリプトを生成
     const generatedScript = await generatePresentationScript(slides, presentationStyle, targetDuration, language);
