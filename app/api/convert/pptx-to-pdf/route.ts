@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ConvertAPIの設定
-    const convertApiSecret = process.env.CONVERTAPI_SECRET;
+    const convertApiSecret = 'j2TXcTMe1Sw4Yt2k4rYEw3BQfxhTKqnV';
     if (!convertApiSecret) {
       console.error('CONVERTAPI_SECRET not found in environment variables');
       return NextResponse.json(
