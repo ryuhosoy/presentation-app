@@ -20,6 +20,7 @@ COPY postcss.config.js ./
 COPY app ./app
 COPY components ./components
 COPY lib ./lib
+COPY hooks ./hooks
 COPY public ./public
 
 # Next.jsアプリケーションをビルド
