@@ -12,8 +12,15 @@ COPY package*.json ./
 # 脆弱性警告を無視してビルドを続行
 RUN npm install --no-audit --legacy-peer-deps
 
-# アプリケーションのソースコードをコピー
-COPY . .
+# アプリケーションのソースコードをコピー（必要なもののみ）
+COPY next.config.js ./
+COPY tsconfig.json ./
+COPY tailwind.config.ts ./
+COPY postcss.config.js ./
+COPY app ./app
+COPY components ./components
+COPY lib ./lib
+COPY public ./public
 
 # Next.jsアプリケーションをビルド
 RUN npm run build
